@@ -210,7 +210,7 @@ setup_ssh() {
 install_packages() {
   log "Installing packages..."
   vm "sudo apt-get update -qq"
-  vm_install git curl
+  vm_install curl tree net-tools
   # vm_install htop tmux
   # vm "curl -fsSL https://example.com/install.sh | bash"
 }
