@@ -27,7 +27,7 @@ No interactive shell at the end.
 ```
 mp-env-setup.sh   # the whole tool
 README.md         # human usage
-agent.md          # this file (for agents)
+AGENT.md          # this file (for agents)
 ```
 
 ## VM lifecycle
