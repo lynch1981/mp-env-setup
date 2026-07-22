@@ -1,0 +1,2 @@
+# Guest shell aliases / options (sourced by ~/.bashrc on Ubuntu)
+set -o vi

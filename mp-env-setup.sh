@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # mp-env-setup.sh — Create an Ubuntu multipass VM (reuse only with --reuse),
-# sync local files, post-process, and install packages.
+# sync local files (data/), post-process, setup SSH, run data/init-env.sh.
 #
-# Design: config + ordered pipeline of steps. To extend, edit a step
-# function (list of transfer_to_vm / vm calls) or add a name to STEPS.
+# Design: config + ordered pipeline of steps. Guest packages/setup live in
+# data/init-env.sh. Host-side steps: edit functions / STEPS in this file.
 set -euo pipefail
+
+# Repo root (directory of this script) — local assets live under data/.
+ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 # =============================================================================
 # CONFIG — defaults (override via env vars or CLI flags)
@@ -30,7 +33,7 @@ STEPS=(
   sync_files
   post_process
   setup_ssh
-  install_packages
+  init_env
 )
 
 # =============================================================================
@@ -46,7 +49,7 @@ usage() {
 Usage: $(basename "$0") [options]
 
 Launch a new Ubuntu multipass VM (or reuse with --reuse), sync files,
-post-process, and install packages.
+post-process, setup SSH, and run data/init-env.sh on the guest.
 
 By default, if the VM already exists the script exits. Pass --reuse to
 keep using it.
@@ -88,11 +91,6 @@ done
 
 vm() {
   multipass exec "$VM_NAME" -- bash -lc "set -euo pipefail; $*"
-}
-
-# apt-get install on the VM (noninteractive). Usage: vm_install git curl htop
-vm_install() {
-  vm "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y $*"
 }
 
 transfer_to_vm() {
@@ -173,11 +171,13 @@ wait_ready() {
 }
 
 # Edit this function to copy more local files into the VM.
-# Transfer only — unpacking belongs in post_process.
+# Transfer only — unpacking belongs in post_process. Assets live under data/.
 sync_files() {
   log "Syncing files..."
-  transfer_to_vm "$HOME/vim.tgz" "${REMOTE_HOME}/vim.tgz"
-  # transfer_to_vm "$HOME/dotfiles.tgz" "${REMOTE_HOME}/dotfiles.tgz"
+  transfer_to_vm "$ROOT/data/vim.tgz" "${REMOTE_HOME}/vim.tgz"
+  transfer_to_vm "$ROOT/data/init-env.sh" "${REMOTE_HOME}/init-env.sh"
+  transfer_to_vm "$ROOT/data/bash_aliases" "${REMOTE_HOME}/.bash_aliases"
+  # transfer_to_vm "$ROOT/data/dotfiles.tgz" "${REMOTE_HOME}/dotfiles.tgz"
   # transfer_to_vm "$HOME/.gitconfig" "${REMOTE_HOME}/.gitconfig"
 }
 
@@ -185,6 +185,7 @@ sync_files() {
 post_process() {
   log "Post-processing on VM..."
   vm "cd '$REMOTE_HOME' && tar -xzf vim.tgz"
+  vm "chmod +x '$REMOTE_HOME/init-env.sh'"
   # vm "cd '$REMOTE_HOME' && tar -xzf dotfiles.tgz"
 }
 
@@ -206,13 +207,11 @@ setup_ssh() {
   shopt -u nullglob
 }
 
-# Edit this function to install software / run setup on the VM.
-install_packages() {
-  log "Installing packages..."
-  vm "sudo apt-get update -qq"
-  vm_install curl tree net-tools
-  # vm_install htop tmux
-  # vm "curl -fsSL https://example.com/install.sh | bash"
+# Run the guest init script synced from data/init-env.sh.
+# Edit data/init-env.sh for packages and other env setup (not this function).
+init_env() {
+  log "Initializing env on VM (init-env.sh)..."
+  vm "bash '$REMOTE_HOME/init-env.sh'"
 }
 
 # =============================================================================

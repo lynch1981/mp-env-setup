@@ -1,12 +1,13 @@
 # mp-env-setup
 
-Create (or reuse) an Ubuntu multipass work VM, sync local files, post-process them, and install packages.
+Create an Ubuntu multipass work VM, sync local files from `data/`, post-process them, setup SSH, and run a guest init script.
 
 ## Requirements
 
 - [Multipass](https://multipass.run)
 - Bash (works with macOS system Bash 3.2+)
-- `~/vim.tgz`, `~/.ssh/config`, and any `~/.ssh/id_*` keys
+- `data/vim.tgz`, `data/init-env.sh`, `data/bash_aliases`
+- `~/.ssh/config` and any `~/.ssh/id_*` keys
 
 ## Quick start
 
@@ -37,37 +38,41 @@ Env vars: `VM_NAME`, `UBUNTU_RELEASE`, `CPUS`, `MEMORY`, `DISK`, `REUSE`.
 ## Pipeline
 
 ```
-ensure_vm → wait_ready → sync_files → post_process → setup_ssh → install_packages
+ensure_vm → wait_ready → sync_files → post_process → setup_ssh → init_env
 ```
 
-Comment out a name in `STEPS` to disable a stage.
+- **Host** (`mp-env-setup.sh`): multipass, file sync, SSH
+- **Guest** (`data/init-env.sh`): apt packages and other env setup
 
-### Customize by editing step functions
+### Sync + post-process
 
 ```bash
 sync_files() {
-  log "Syncing files..."
-  transfer_to_vm "$HOME/vim.tgz" "${REMOTE_HOME}/vim.tgz"
+  transfer_to_vm "$ROOT/data/vim.tgz" "${REMOTE_HOME}/vim.tgz"
+  transfer_to_vm "$ROOT/data/init-env.sh" "${REMOTE_HOME}/init-env.sh"
+  transfer_to_vm "$ROOT/data/bash_aliases" "${REMOTE_HOME}/.bash_aliases"
 }
 
 post_process() {
-  log "Post-processing on VM..."
   vm "cd '$REMOTE_HOME' && tar -xzf vim.tgz"
-}
-
-setup_ssh() {
-  push_ssh_file "$HOME/.ssh/config" 600
-  # then every ~/.ssh/id_* (private → 600, .pub → 644)
-}
-
-install_packages() {
-  log "Installing packages..."
-  vm "sudo apt-get update -qq"
-  vm_install git curl
+  vm "chmod +x '$REMOTE_HOME/init-env.sh'"
 }
 ```
 
-### New step
+### Guest packages / env
 
-1. Write a function, e.g. `setup_docker() { ... }`.
-2. Add its name to `STEPS`.
+Edit `data/init-env.sh`:
+
+```bash
+sudo apt-get update -qq
+sudo apt-get install -y git curl tree net-tools
+curl -fsSL https://x.ai/cli/install.sh | bash   # Grok Build
+```
+
+The host only runs it:
+
+```bash
+init_env() {
+  vm "bash '$REMOTE_HOME/init-env.sh'"
+}
+```
